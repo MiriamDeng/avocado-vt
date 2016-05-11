@@ -448,10 +448,25 @@ class VM(virt_vm.BaseVM):
             if '86' in params.get('vm_arch_name', arch.ARCH):
                 cmd += " -device isa-serial"
             elif 'ppc' in params.get('vm_arch_name', arch.ARCH):
-                cmd += " -device spapr-vty"
-                # Workaround for console issue, details:
-                #   lists.gnu.org/archive/html/qemu-ppc/2013-10/msg00129.html
-                cmd += _add_option("reg", "0x30000000")
+                if ('tcp'in params.get('pro_backend')):
+                    pro_host = params.get('pro_host')
+                    pro_port = params.get('pro_port')
+                    cmd  = ""
+                    cmd += " -chardev socket"
+                    cmd += _add_option("id", serial_id)
+                    cmd += _add_option("host", pro_host)
+                    cmd += _add_option("port", pro_port)
+                    cmd += _add_option("server", "NO_EQUAL_STRING")
+                    cmd += _add_option("nowait", "NO_EQUAL_STRING")
+                    cmd += " -device spapr-vty"
+                    # Workaround for console issue, details:
+                    # lists.gnu.org/archive/html/qemu-ppc/2013-10/msg00129.html
+                    cmd += _add_option("reg", "0x30000000")
+                else:
+                    cmd += " -device spapr-vty"
+                    # Workaround for console issue, details:
+                    # lists.gnu.org/archive/html/qemu-ppc/2013-10/msg00129.html
+                    cmd += _add_option("reg", "0x30000000")
             cmd += _add_option("chardev", serial_id)
             return cmd
 
@@ -2142,10 +2157,14 @@ class VM(virt_vm.BaseVM):
         except IndexError:
             raise virt_vm.VMConfigMissingError(self.name, "serial")
         log_name = "serial-%s-%s.log" % (tmp_serial, self.name)
+        if 'ppc' in self.params.get('vm_arch_name',arch.ARCH) and 'tcp'in self.params.get('pro_backend'):
+            create_serial_cmd = "nc %s %s" % (self.params.get('pro_host'),self.params.get('pro_port'))
+        else:
+            create_serial_cmd = "nc -U %s" % self.get_serial_console_filename(tmp_serial)
         self.serial_console_log = os.path.join(utils_misc.get_log_file_dir(),
                                                log_name)
         self.serial_console = aexpect.ShellSession(
-            "nc -U %s" % self.get_serial_console_filename(tmp_serial),
+            create_serial_cmd,
             auto_close=False,
             output_func=utils_misc.log_line,
             output_params=(log_name,),
